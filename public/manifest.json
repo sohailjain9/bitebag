@@ -1,0 +1,16 @@
+{
+  "name": "BiteBag",
+  "short_name": "BiteBag",
+  "description": "Great food. Half the price. Zero waste.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#2D6A4F",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}
