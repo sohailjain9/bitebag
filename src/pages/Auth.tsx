@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import MobileLayout from "@/components/MobileLayout";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 type Step = "phone" | "otp" | "name";
 
@@ -12,20 +14,34 @@ const Auth = () => {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [name, setName] = useState("");
   const [countdown, setCountdown] = useState(0);
+  const [loading, setLoading] = useState(false);
 
-  const handleSendOtp = () => {
-    if (phone.length >= 10) {
+  const startCountdown = () => {
+    setCountdown(30);
+    const interval = setInterval(() => {
+      setCountdown((c) => {
+        if (c <= 1) { clearInterval(interval); return 0; }
+        return c - 1;
+      });
+    }, 1000);
+  };
+
+  const handleSendOtp = async () => {
+    if (phone.length < 10) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-otp", {
+        body: { phone },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       setStep("otp");
-      setCountdown(30);
-      const interval = setInterval(() => {
-        setCountdown((c) => {
-          if (c <= 1) {
-            clearInterval(interval);
-            return 0;
-          }
-          return c - 1;
-        });
-      }, 1000);
+      startCountdown();
+      toast({ title: "OTP sent!", description: `Code sent to +91 ${phone}` });
+    } catch (err: any) {
+      toast({ title: "Failed to send OTP", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -34,36 +50,68 @@ const Auth = () => {
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
-    // Auto-focus next
     if (value && index < 5) {
-      const next = document.getElementById(`otp-${index + 1}`);
-      next?.focus();
+      document.getElementById(`otp-${index + 1}`)?.focus();
     }
   };
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
     if (e.key === "Backspace" && !otp[index] && index > 0) {
-      const prev = document.getElementById(`otp-${index - 1}`);
-      prev?.focus();
+      document.getElementById(`otp-${index - 1}`)?.focus();
     }
   };
 
-  const handleVerify = () => {
-    if (otp.every((d) => d !== "")) {
-      setStep("name");
+  const handleVerify = async () => {
+    const code = otp.join("");
+    if (code.length !== 6) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("verify-otp", {
+        body: { phone, code },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      // Set session from the response
+      if (data?.session) {
+        await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+      }
+
+      if (data?.isNewUser) {
+        setStep("name");
+      } else {
+        navigate("/home");
+      }
+    } catch (err: any) {
+      toast({ title: "Verification failed", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleComplete = () => {
-    if (name.trim()) {
+  const handleComplete = async () => {
+    if (!name.trim()) return;
+    setLoading(true);
+    try {
+      // Update profile with display name
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("profiles").update({ display_name: name.trim() }).eq("user_id", user.id);
+      }
       navigate("/home");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <MobileLayout showNav={false}>
       <div className="min-h-screen px-6 pt-4 animate-slide-in">
-        {/* Back */}
         <button
           onClick={() => {
             if (step === "phone") navigate(-1);
@@ -81,7 +129,7 @@ const Auth = () => {
               Enter your mobile number
             </h1>
             <p className="text-muted-foreground text-sm mb-8">
-              We'll send you a one-time password
+              We'll send you a one-time password via SMS
             </p>
 
             <div className="flex gap-3 mb-6">
@@ -100,9 +148,10 @@ const Auth = () => {
 
             <button
               onClick={handleSendOtp}
-              disabled={phone.length < 10}
-              className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl text-base disabled:opacity-40 transition-all active:scale-[0.97]"
+              disabled={phone.length < 10 || loading}
+              className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl text-base disabled:opacity-40 transition-all active:scale-[0.97] flex items-center justify-center gap-2"
             >
+              {loading && <Loader2 size={18} className="animate-spin" />}
               Send OTP
             </button>
           </div>
@@ -134,9 +183,10 @@ const Auth = () => {
 
             <button
               onClick={handleVerify}
-              disabled={otp.some((d) => d === "")}
-              className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl text-base disabled:opacity-40 transition-all active:scale-[0.97] mb-4"
+              disabled={otp.some((d) => d === "") || loading}
+              className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl text-base disabled:opacity-40 transition-all active:scale-[0.97] mb-4 flex items-center justify-center gap-2"
             >
+              {loading && <Loader2 size={18} className="animate-spin" />}
               Verify
             </button>
 
@@ -145,16 +195,9 @@ const Auth = () => {
                 `Resend OTP in ${countdown}s`
               ) : (
                 <button
-                  onClick={() => {
-                    setCountdown(30);
-                    const interval = setInterval(() => {
-                      setCountdown((c) => {
-                        if (c <= 1) { clearInterval(interval); return 0; }
-                        return c - 1;
-                      });
-                    }, 1000);
-                  }}
+                  onClick={() => { handleSendOtp(); }}
                   className="text-primary font-medium"
+                  disabled={loading}
                 >
                   Resend OTP
                 </button>
@@ -182,9 +225,10 @@ const Auth = () => {
 
             <button
               onClick={handleComplete}
-              disabled={!name.trim()}
-              className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl text-base disabled:opacity-40 transition-all active:scale-[0.97]"
+              disabled={!name.trim() || loading}
+              className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl text-base disabled:opacity-40 transition-all active:scale-[0.97] flex items-center justify-center gap-2"
             >
+              {loading && <Loader2 size={18} className="animate-spin" />}
               Let's Go 🎉
             </button>
           </div>
