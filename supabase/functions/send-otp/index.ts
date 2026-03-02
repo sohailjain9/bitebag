@@ -1,5 +1,3 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -21,38 +19,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // Generate 6-digit OTP
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5 min
-
-    // Invalidate previous codes for this phone
-    await supabase
-      .from("otp_codes")
-      .delete()
-      .eq("phone", phone);
-
-    // Store OTP
-    const { error: insertError } = await supabase
-      .from("otp_codes")
-      .insert({ phone, code, expires_at: expiresAt });
-
-    if (insertError) throw insertError;
-
-    // Send via Twilio
     const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID")!;
     const authToken = Deno.env.get("TWILIO_AUTH_TOKEN")!;
-    const fromNumber = Deno.env.get("TWILIO_PHONE_NUMBER")!;
+    const serviceSid = Deno.env.get("TWILIO_VERIFY_SERVICE_SID")!;
 
-    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+    // Send verification via Twilio Verify API
+    const twilioUrl = `https://verify.twilio.com/v2/Services/${serviceSid}/Verifications`;
     const body = new URLSearchParams({
       To: `+91${phone}`,
-      From: fromNumber,
-      Body: `Your verification code is ${code}. It expires in 5 minutes.`,
+      Channel: "sms",
     });
 
     const twilioRes = await fetch(twilioUrl, {
@@ -66,8 +41,8 @@ Deno.serve(async (req) => {
 
     if (!twilioRes.ok) {
       const err = await twilioRes.text();
-      console.error("Twilio error:", err);
-      throw new Error("Failed to send SMS");
+      console.error("Twilio Verify error:", err);
+      throw new Error("Failed to send verification code");
     }
 
     return new Response(
