@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      orders: {
+        Row: {
+          amount: number
+          created_at: string
+          delivery_fee: number
+          delivery_type: string
+          id: string
+          order_number: string
+          platform_fee: number
+          restaurant_id: string
+          restaurant_name: string
+          status: string
+          stripe_payment_intent_id: string | null
+          total: number
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          delivery_fee?: number
+          delivery_type?: string
+          id?: string
+          order_number: string
+          platform_fee?: number
+          restaurant_id: string
+          restaurant_name: string
+          status?: string
+          stripe_payment_intent_id?: string | null
+          total: number
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          delivery_fee?: number
+          delivery_type?: string
+          id?: string
+          order_number?: string
+          platform_fee?: number
+          restaurant_id?: string
+          restaurant_name?: string
+          status?: string
+          stripe_payment_intent_id?: string | null
+          total?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       otp_codes: {
         Row: {
           code: string
