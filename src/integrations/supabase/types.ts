@@ -18,11 +18,15 @@ export type Database = {
         Row: {
           amount: number
           created_at: string
+          customer_name: string | null
+          customer_phone: string | null
+          delivery_address: string | null
           delivery_fee: number
           delivery_type: string
           id: string
           order_number: string
           platform_fee: number
+          restaurant_address: string | null
           restaurant_id: string
           restaurant_name: string
           status: string
@@ -33,11 +37,15 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string
+          customer_name?: string | null
+          customer_phone?: string | null
+          delivery_address?: string | null
           delivery_fee?: number
           delivery_type?: string
           id?: string
           order_number: string
           platform_fee?: number
+          restaurant_address?: string | null
           restaurant_id: string
           restaurant_name: string
           status?: string
@@ -48,11 +56,15 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string
+          customer_name?: string | null
+          customer_phone?: string | null
+          delivery_address?: string | null
           delivery_fee?: number
           delivery_type?: string
           id?: string
           order_number?: string
           platform_fee?: number
+          restaurant_address?: string | null
           restaurant_id?: string
           restaurant_name?: string
           status?: string
@@ -116,12 +128,78 @@ export type Database = {
         }
         Relationships: []
       }
+      restaurants: {
+        Row: {
+          active: boolean | null
+          address: string | null
+          area: string | null
+          bag_contents: string | null
+          bag_price: number | null
+          bags_remaining: number | null
+          city: string | null
+          created_at: string
+          cuisine: string | null
+          delivery_available: boolean | null
+          id: string
+          latitude: number | null
+          longitude: number | null
+          name: string
+          original_value: number | null
+          photo_url: string | null
+          pickup_end: string | null
+          pickup_start: string | null
+          total_bags: number | null
+        }
+        Insert: {
+          active?: boolean | null
+          address?: string | null
+          area?: string | null
+          bag_contents?: string | null
+          bag_price?: number | null
+          bags_remaining?: number | null
+          city?: string | null
+          created_at?: string
+          cuisine?: string | null
+          delivery_available?: boolean | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          name: string
+          original_value?: number | null
+          photo_url?: string | null
+          pickup_end?: string | null
+          pickup_start?: string | null
+          total_bags?: number | null
+        }
+        Update: {
+          active?: boolean | null
+          address?: string | null
+          area?: string | null
+          bag_contents?: string | null
+          bag_price?: number | null
+          bags_remaining?: number | null
+          city?: string | null
+          created_at?: string
+          cuisine?: string | null
+          delivery_available?: boolean | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          name?: string
+          original_value?: number | null
+          photo_url?: string | null
+          pickup_end?: string | null
+          pickup_start?: string | null
+          total_bags?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      decrement_bags: { Args: { restaurant_uuid: string }; Returns: number }
     }
     Enums: {
       [_ in never]: never

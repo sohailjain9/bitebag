@@ -1,21 +1,24 @@
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { Search, Loader2 } from "lucide-react";
 import MobileLayout from "@/components/MobileLayout";
 import RestaurantCard from "@/components/RestaurantCard";
-import { restaurants } from "@/data/restaurants";
+import { useRestaurants } from "@/hooks/useRestaurants";
+import { useUserLocation } from "@/hooks/useUserLocation";
 
 const cuisineFilters = ["All", "Bakery", "Cafe", "Patisserie", "Indian"];
 
 const SearchPage = () => {
   const [search, setSearch] = useState("");
   const [activeCuisine, setActiveCuisine] = useState("All");
+  const { restaurants, loading } = useRestaurants();
+  const { location: userLoc } = useUserLocation();
 
   const filtered = restaurants.filter((r) => {
     const matchesSearch =
       r.name.toLowerCase().includes(search.toLowerCase()) ||
-      r.cuisine.toLowerCase().includes(search.toLowerCase());
+      (r.cuisine || "").toLowerCase().includes(search.toLowerCase());
     const matchesCuisine =
-      activeCuisine === "All" || r.cuisine.toLowerCase().includes(activeCuisine.toLowerCase());
+      activeCuisine === "All" || (r.cuisine || "").toLowerCase().includes(activeCuisine.toLowerCase());
     return matchesSearch && matchesCuisine;
   });
 
@@ -24,12 +27,8 @@ const SearchPage = () => {
       <div className="px-4 pt-5 animate-fade-scale-in">
         <h1 className="font-heading font-bold text-xl text-foreground mb-4">Search</h1>
 
-        {/* Search input */}
         <div className="relative mb-4">
-          <Search
-            size={18}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
+          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
             value={search}
@@ -40,7 +39,6 @@ const SearchPage = () => {
           />
         </div>
 
-        {/* Cuisine filters */}
         <div className="flex gap-2 mb-5 overflow-x-auto no-scrollbar">
           {cuisineFilters.map((c) => (
             <button
@@ -57,15 +55,20 @@ const SearchPage = () => {
           ))}
         </div>
 
-        {/* Results */}
-        <div className="flex flex-col gap-4">
-          {filtered.map((r) => (
-            <RestaurantCard key={r.id} restaurant={r} />
-          ))}
-          {filtered.length === 0 && (
-            <p className="text-center text-muted-foreground py-12 text-sm">No results</p>
-          )}
-        </div>
+        {loading ? (
+          <div className="flex justify-center py-16">
+            <Loader2 size={28} className="text-primary animate-spin" />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {filtered.map((r) => (
+              <RestaurantCard key={r.id} restaurant={r} userLat={userLoc?.latitude} userLon={userLoc?.longitude} />
+            ))}
+            {filtered.length === 0 && (
+              <p className="text-center text-muted-foreground py-12 text-sm">No results</p>
+            )}
+          </div>
+        )}
       </div>
     </MobileLayout>
   );
