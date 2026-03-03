@@ -1,51 +1,84 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Lock, CreditCard } from "lucide-react";
+import { ArrowLeft, MapPin, Lock, CreditCard, Loader2 } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import MobileLayout from "@/components/MobileLayout";
-import { Restaurant } from "@/data/restaurants";
+import { DbRestaurant } from "@/types/restaurant";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { formatPickupWindow } from "@/lib/formatTime";
 
 const stripePromise = loadStripe("pk_test_51T5thVHcVIHeSK4lvTnxhAZpfbDouY9gZ5CInN6sxK0VylZputzvP68lJrYJxJyPMqsu0nKKOJIgjBe6btpLlQ4G00FLNiP3Sr");
 
-const CheckoutForm = ({ restaurant, total, deliveryType, platformFee, deliveryFee }: {
-  restaurant: Restaurant;
+interface CheckoutFormProps {
+  restaurant: DbRestaurant;
   total: number;
   deliveryType: "Pickup" | "Delivery";
-  platformFee: number;
   deliveryFee: number;
-}) => {
+  deliveryAddress: string;
+}
+
+const CheckoutForm = ({ restaurant, total, deliveryType, deliveryFee, deliveryAddress }: CheckoutFormProps) => {
   const navigate = useNavigate();
   const stripe = useStripe();
   const elements = useElements();
+  const { user } = useAuth();
   const [processing, setProcessing] = useState(false);
 
   const handlePay = async () => {
     if (!stripe || !elements) return;
-
     const cardElement = elements.getElement(CardElement);
     if (!cardElement) return;
+
+    // Check bags_remaining first
+    const { data: freshRestaurant } = await supabase
+      .from("restaurants")
+      .select("bags_remaining")
+      .eq("id", restaurant.id)
+      .single();
+
+    if (!freshRestaurant || (freshRestaurant as any).bags_remaining <= 0) {
+      toast.error("Sorry, all bags have been claimed!");
+      return;
+    }
 
     setProcessing(true);
 
     try {
-      // Create payment intent via edge function
+      // Get user profile for name/phone
+      let customerName = "";
+      let customerPhone = "";
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("display_name, phone")
+          .eq("user_id", user.id)
+          .single();
+        if (profile) {
+          customerName = profile.display_name || "";
+          customerPhone = profile.phone || "";
+        }
+      }
+
       const { data, error } = await supabase.functions.invoke("create-payment-intent", {
         body: {
           amount: total,
           restaurantId: restaurant.id,
           restaurantName: restaurant.name,
+          restaurantAddress: restaurant.address || "",
           deliveryType,
-          platformFee,
           deliveryFee,
+          deliveryAddress: deliveryType === "Delivery" ? deliveryAddress : "",
+          customerName,
+          customerPhone,
+          bagPrice: restaurant.bag_price || 0,
         },
       });
 
       if (error || data?.error) throw new Error(data?.error || error?.message || "Payment failed");
 
-      // Confirm payment with Stripe
       const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(data.clientSecret, {
         payment_method: { card: cardElement },
       });
@@ -59,10 +92,17 @@ const CheckoutForm = ({ restaurant, total, deliveryType, platformFee, deliveryFe
       if (paymentIntent?.status === "succeeded") {
         navigate("/confirmation", {
           state: {
-            restaurant: { name: restaurant.name, window: restaurant.window, location: restaurant.location },
+            restaurant: {
+              name: restaurant.name,
+              address: restaurant.address,
+              pickup_start: restaurant.pickup_start,
+              pickup_end: restaurant.pickup_end,
+            },
             total,
             deliveryType,
+            deliveryAddress,
             orderNumber: data.orderNumber,
+            createdAt: new Date().toISOString(),
           },
         });
       }
@@ -79,7 +119,7 @@ const CheckoutForm = ({ restaurant, total, deliveryType, platformFee, deliveryFe
       className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl text-base flex items-center justify-center gap-2 disabled:opacity-70 transition-all active:scale-[0.97]"
     >
       {processing ? (
-        <div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+        <Loader2 size={20} className="animate-spin" />
       ) : (
         <>
           <Lock size={16} />
@@ -92,28 +132,48 @@ const CheckoutForm = ({ restaurant, total, deliveryType, platformFee, deliveryFe
 
 const Checkout = () => {
   const navigate = useNavigate();
-  const { state } = useLocation() as { state: { restaurant: Restaurant } | null };
+  const { state } = useLocation() as { state: { restaurant: DbRestaurant } | null };
   const restaurant = state?.restaurant;
-
   const [deliveryType, setDeliveryType] = useState<"Pickup" | "Delivery">(
-    restaurant?.windowType || "Delivery"
+    restaurant?.delivery_available ? "Delivery" : "Pickup"
   );
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [detectingLocation, setDetectingLocation] = useState(false);
+
+  useEffect(() => {
+    if (deliveryType === "Delivery" && !deliveryAddress) {
+      setDetectingLocation(true);
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          () => {
+            setDeliveryAddress("Bandra West, Mumbai 400050");
+            setDetectingLocation(false);
+          },
+          () => {
+            setDetectingLocation(false);
+          }
+        );
+      } else {
+        setDetectingLocation(false);
+      }
+    }
+  }, [deliveryType]);
 
   if (!restaurant) {
     navigate("/home");
     return null;
   }
 
-  const platformFee = 10;
-  const deliveryFee = deliveryType === "Delivery" ? 30 : 0;
-  const total = restaurant.bagPrice + platformFee + deliveryFee;
+  const bagPrice = restaurant.bag_price || 0;
+  const deliveryFee = deliveryType === "Delivery" ? 49 : 0;
+  const total = bagPrice + deliveryFee;
 
   const cardElementOptions = {
     style: {
       base: {
         fontSize: "16px",
         color: "#1a1a1a",
-        fontFamily: "'Inter', sans-serif",
+        fontFamily: "'DM Sans', sans-serif",
         "::placeholder": { color: "#9ca3af" },
       },
       invalid: { color: "#ef4444" },
@@ -141,11 +201,7 @@ const Checkout = () => {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Surprise Bag</span>
-                <span>₹{restaurant.bagPrice}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Platform fee</span>
-                <span>₹{platformFee}</span>
+                <span>₹{bagPrice}</span>
               </div>
               {deliveryType === "Delivery" && (
                 <div className="flex justify-between">
@@ -163,37 +219,64 @@ const Checkout = () => {
 
           {/* Delivery toggle */}
           <div className="flex bg-secondary rounded-xl p-1 mb-5">
-            {(["Pickup", "Delivery"] as const).map((type) => (
-              <button
-                key={type}
-                onClick={() => setDeliveryType(type)}
-                className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
-                  deliveryType === type
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {type}
-              </button>
-            ))}
+            {(["Pickup", "Delivery"] as const).map((type) => {
+              const disabled = type === "Delivery" && !restaurant.delivery_available;
+              return (
+                <button
+                  key={type}
+                  disabled={disabled}
+                  onClick={() => setDeliveryType(type)}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                    deliveryType === type
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground"
+                  } ${disabled ? "opacity-40" : ""}`}
+                >
+                  {type}
+                </button>
+              );
+            })}
           </div>
 
           {/* Delivery address */}
           {deliveryType === "Delivery" && (
             <div className="mb-5">
               <h3 className="font-heading font-bold text-sm mb-3">Deliver to</h3>
-              <div className="space-y-2">
-                <button className="w-full flex items-center gap-3 bg-secondary rounded-xl p-3.5 text-left border-2 border-primary">
-                  <MapPin size={18} className="text-primary shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium">Use my current location</p>
-                    <p className="text-xs text-muted-foreground">Bandra West, Mumbai</p>
+              {detectingLocation ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground p-3">
+                  <Loader2 size={16} className="animate-spin text-primary" />
+                  Detecting your location...
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-start gap-3 bg-secondary rounded-xl p-3.5 border-2 border-primary">
+                    <MapPin size={18} className="text-primary shrink-0 mt-0.5" />
+                    <input
+                      type="text"
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      placeholder="Enter delivery address"
+                      className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                    />
                   </div>
-                </button>
-                <button className="w-full flex items-center gap-3 bg-secondary rounded-xl p-3.5 text-left border border-border">
-                  <MapPin size={18} className="text-muted-foreground shrink-0" />
-                  <p className="text-sm text-muted-foreground">Enter address manually</p>
-                </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Pickup info */}
+          {deliveryType === "Pickup" && (
+            <div className="mb-5">
+              <h3 className="font-heading font-bold text-sm mb-3">Pickup from</h3>
+              <div className="flex items-start gap-3 bg-secondary rounded-xl p-3.5 border border-border">
+                <MapPin size={18} className="text-primary shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium">{restaurant.name}</p>
+                  <p className="text-xs text-muted-foreground">{restaurant.address}</p>
+                  <p className="text-xs text-primary mt-1">
+                    {formatPickupWindow(restaurant.pickup_start, restaurant.pickup_end)}
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -208,6 +291,10 @@ const Checkout = () => {
               </div>
               <CardElement options={cardElementOptions} />
             </div>
+            <div className="flex items-center gap-1.5 mt-3 justify-center">
+              <Lock size={12} className="text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Secured by Stripe</span>
+            </div>
           </div>
 
           {/* Sticky pay button */}
@@ -216,8 +303,8 @@ const Checkout = () => {
               restaurant={restaurant}
               total={total}
               deliveryType={deliveryType}
-              platformFee={platformFee}
               deliveryFee={deliveryFee}
+              deliveryAddress={deliveryAddress}
             />
           </div>
         </div>

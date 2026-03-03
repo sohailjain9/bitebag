@@ -1,30 +1,23 @@
-import { useState, useEffect } from "react";
-import { Search, ChevronDown, User } from "lucide-react";
+import { useState } from "react";
+import { Search, ChevronDown, User, Loader2, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
 import RestaurantCard from "@/components/RestaurantCard";
-import { restaurants } from "@/data/restaurants";
+import { useRestaurants } from "@/hooks/useRestaurants";
+import { useUserLocation } from "@/hooks/useUserLocation";
 
 const Home = () => {
   const navigate = useNavigate();
-  const [location, setLocation] = useState("Detecting...");
+  const { restaurants, loading, error, refetch } = useRestaurants();
+  const { location: userLoc } = useUserLocation();
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        () => setLocation("Bandra West, Mumbai"),
-        () => setLocation("Mumbai, India")
-      );
-    } else {
-      setLocation("Mumbai, India");
-    }
-  }, []);
+  const locationText = userLoc ? "Bandra West, Mumbai" : "Mumbai, India";
 
   const filtered = restaurants.filter(
     (r) =>
       r.name.toLowerCase().includes(search.toLowerCase()) ||
-      r.cuisine.toLowerCase().includes(search.toLowerCase())
+      (r.cuisine || "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -44,7 +37,7 @@ const Home = () => {
         {/* Location */}
         <button className="flex items-center gap-1 mb-4 group">
           <span className="text-muted-foreground text-xs">Delivering to</span>
-          <span className="text-foreground text-xs font-bold ml-1">{location}</span>
+          <span className="text-foreground text-xs font-bold ml-1">{locationText}</span>
           <ChevronDown size={14} className="text-primary" />
         </button>
 
@@ -73,17 +66,44 @@ const Home = () => {
           </span>
         </div>
 
+        {/* Loading */}
+        {loading && (
+          <div className="flex justify-center py-16">
+            <Loader2 size={28} className="text-primary animate-spin" />
+          </div>
+        )}
+
+        {/* Error */}
+        {error && !loading && (
+          <div className="text-center py-12">
+            <p className="text-destructive text-sm mb-3">Unable to load restaurants. Tap to retry.</p>
+            <button
+              onClick={refetch}
+              className="inline-flex items-center gap-2 bg-primary text-primary-foreground text-sm font-semibold px-5 py-2.5 rounded-xl"
+            >
+              <RefreshCw size={14} /> Retry
+            </button>
+          </div>
+        )}
+
         {/* Restaurant list */}
-        <div className="flex flex-col gap-4 pb-4">
-          {filtered.map((r) => (
-            <RestaurantCard key={r.id} restaurant={r} />
-          ))}
-          {filtered.length === 0 && (
-            <p className="text-center text-muted-foreground py-12 text-sm">
-              No restaurants found
-            </p>
-          )}
-        </div>
+        {!loading && !error && (
+          <div className="flex flex-col gap-4 pb-4">
+            {filtered.map((r) => (
+              <RestaurantCard
+                key={r.id}
+                restaurant={r}
+                userLat={userLoc?.latitude}
+                userLon={userLoc?.longitude}
+              />
+            ))}
+            {filtered.length === 0 && (
+              <p className="text-center text-muted-foreground py-12 text-sm">
+                No restaurants found
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </MobileLayout>
   );
