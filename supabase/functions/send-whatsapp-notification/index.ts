@@ -22,8 +22,11 @@ serve(async (req) => {
     const authToken = Deno.env.get("TWILIO_AUTH_TOKEN");
 
     if (!accountSid || !authToken) {
+      console.error("Twilio credentials missing - TWILIO_ACCOUNT_SID:", !!accountSid, "TWILIO_AUTH_TOKEN:", !!authToken);
       throw new Error("Twilio credentials not configured");
     }
+
+    console.log("Sending WhatsApp notification for order:", orderNumber);
 
     // Format date
     const d = new Date(createdAt);
@@ -35,16 +38,16 @@ serve(async (req) => {
     if (h === 0) h = 12;
     const dateStr = `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} ${h}:${min} ${ampm}`;
 
-    const typeCapitalized = deliveryType.charAt(0).toUpperCase() + deliveryType.slice(1);
-    const locationLine = deliveryType.toLowerCase() === "delivery"
-      ? `Address: ${deliveryAddress}`
-      : `Pickup from: ${restaurantAddress}`;
+    const typeCapitalized = (deliveryType || "Pickup").charAt(0).toUpperCase() + (deliveryType || "Pickup").slice(1);
+    const locationLine = (deliveryType || "").toLowerCase() === "delivery"
+      ? `Address: ${deliveryAddress || "N/A"}`
+      : `Pickup from: ${restaurantAddress || "N/A"}`;
 
     const messageBody = `🛍️ New BiteBag Order!
 Order: ${orderNumber}
 Restaurant: ${restaurantName}
-Customer: ${customerName}
-Phone: ${customerPhone}
+Customer: ${customerName || "Guest"}
+Phone: ${customerPhone || "N/A"}
 Type: ${typeCapitalized}
 ${locationLine}
 Bag Price: ₹${bagPrice}
@@ -59,6 +62,8 @@ Time: ${dateStr}`;
       Body: messageBody,
     });
 
+    console.log("Calling Twilio API...");
+
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -71,16 +76,18 @@ Time: ${dateStr}`;
     const result = await response.json();
 
     if (!response.ok) {
-      console.error("Twilio error:", result);
-      throw new Error(result.message || "Failed to send WhatsApp");
+      console.error("Twilio API error:", JSON.stringify(result));
+      throw new Error(result.message || `Twilio error: ${response.status}`);
     }
+
+    console.log("WhatsApp sent successfully, SID:", result.sid);
 
     return new Response(
       JSON.stringify({ success: true, sid: result.sid }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     );
   } catch (error) {
-    console.error("WhatsApp notification error:", error);
+    console.error("WhatsApp notification error:", (error as Error).message);
     return new Response(
       JSON.stringify({ error: (error as Error).message }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
