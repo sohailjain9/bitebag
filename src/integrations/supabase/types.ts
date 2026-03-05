@@ -200,6 +200,7 @@ export type Database = {
     }
     Functions: {
       decrement_bags: { Args: { restaurant_uuid: string }; Returns: number }
+      reset_all_bags: { Args: never; Returns: number }
     }
     Enums: {
       [_ in never]: never
