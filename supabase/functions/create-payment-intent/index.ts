@@ -86,7 +86,8 @@ serve(async (req) => {
     // Send WhatsApp notification (fire and forget)
     try {
       const notifUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-whatsapp-notification`;
-      await fetch(notifUrl, {
+      console.log("Calling WhatsApp notification at:", notifUrl);
+      const notifResponse = await fetch(notifUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -106,6 +107,8 @@ serve(async (req) => {
           createdAt: order.created_at,
         }),
       });
+      const notifResult = await notifResponse.text();
+      console.log("WhatsApp notification response:", notifResponse.status, notifResult);
     } catch (e) {
       console.error("WhatsApp notification failed:", e);
     }
