@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Lock, CreditCard, Loader2 } from "lucide-react";
+import { ArrowLeft, MapPin, Lock, CreditCard, Loader2, Check } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import MobileLayout from "@/components/MobileLayout";
@@ -18,9 +18,13 @@ interface CheckoutFormProps {
   deliveryType: "Pickup" | "Delivery";
   deliveryFee: number;
   deliveryAddress: string;
+  restaurantLat?: number | null;
+  restaurantLng?: number | null;
+  deliveryLat?: number | null;
+  deliveryLng?: number | null;
 }
 
-const CheckoutForm = ({ restaurant, total, deliveryType, deliveryFee, deliveryAddress }: CheckoutFormProps) => {
+const CheckoutForm = ({ restaurant, total, deliveryType, deliveryFee, deliveryAddress, restaurantLat, restaurantLng, deliveryLat, deliveryLng }: CheckoutFormProps) => {
   const navigate = useNavigate();
   const stripe = useStripe();
   const elements = useElements();
@@ -32,7 +36,6 @@ const CheckoutForm = ({ restaurant, total, deliveryType, deliveryFee, deliveryAd
     const cardElement = elements.getElement(CardElement);
     if (!cardElement) return;
 
-    // Check bags_remaining first
     const { data: freshRestaurant } = await supabase
       .from("restaurants")
       .select("bags_remaining")
@@ -47,7 +50,6 @@ const CheckoutForm = ({ restaurant, total, deliveryType, deliveryFee, deliveryAd
     setProcessing(true);
 
     try {
-      // Get user profile for name/phone
       let customerName = "";
       let customerPhone = "";
       if (user) {
@@ -97,12 +99,16 @@ const CheckoutForm = ({ restaurant, total, deliveryType, deliveryFee, deliveryAd
               address: restaurant.address,
               pickup_start: restaurant.pickup_start,
               pickup_end: restaurant.pickup_end,
+              latitude: restaurant.latitude,
+              longitude: restaurant.longitude,
             },
             total,
             deliveryType,
             deliveryAddress,
             orderNumber: data.orderNumber,
             createdAt: new Date().toISOString(),
+            deliveryLat,
+            deliveryLng,
           },
         });
       }
@@ -123,7 +129,7 @@ const CheckoutForm = ({ restaurant, total, deliveryType, deliveryFee, deliveryAd
       ) : (
         <>
           <Lock size={16} />
-          Pay ₹{total} securely
+          🔒 Pay ₹{total} securely
         </>
       )}
     </button>
@@ -133,31 +139,57 @@ const CheckoutForm = ({ restaurant, total, deliveryType, deliveryFee, deliveryAd
 const Checkout = () => {
   const navigate = useNavigate();
   const { state } = useLocation() as { state: { restaurant: DbRestaurant } | null };
+  const { user } = useAuth();
   const restaurant = state?.restaurant;
   const [deliveryType, setDeliveryType] = useState<"Pickup" | "Delivery">(
     restaurant?.delivery_available ? "Delivery" : "Pickup"
   );
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
+  const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
   const [detectingLocation, setDetectingLocation] = useState(false);
+  const [savedAddress, setSavedAddress] = useState<string | null>(null);
+  const [addressSource, setAddressSource] = useState<"saved" | "current" | "manual" | null>(null);
 
+  // Fetch saved address
   useEffect(() => {
-    if (deliveryType === "Delivery" && !deliveryAddress) {
-      setDetectingLocation(true);
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          () => {
-            setDeliveryAddress("Bandra West, Mumbai 400050");
-            setDetectingLocation(false);
-          },
-          () => {
-            setDetectingLocation(false);
-          }
-        );
-      } else {
+    if (!user) return;
+    supabase
+      .from("profiles")
+      .select("saved_address")
+      .eq("user_id", user.id)
+      .single()
+      .then(({ data }) => {
+        if ((data as any)?.saved_address) {
+          setSavedAddress((data as any).saved_address);
+        }
+      });
+  }, [user]);
+
+  const detectLocation = async () => {
+    if (!navigator.geolocation) return;
+    setDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        setDeliveryLat(pos.coords.latitude);
+        setDeliveryLng(pos.coords.longitude);
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`
+          );
+          const data = await res.json();
+          setDeliveryAddress(data.display_name || `${pos.coords.latitude}, ${pos.coords.longitude}`);
+        } catch {
+          setDeliveryAddress(`${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
+        }
+        setAddressSource("current");
+        setDetectingLocation(false);
+      },
+      () => {
         setDetectingLocation(false);
       }
-    }
-  }, [deliveryType]);
+    );
+  };
 
   if (!restaurant) {
     navigate("/home");
@@ -238,27 +270,73 @@ const Checkout = () => {
             })}
           </div>
 
-          {/* Delivery address */}
+          {/* Delivery address options */}
           {deliveryType === "Delivery" && (
-            <div className="mb-5">
-              <h3 className="font-heading font-bold text-sm mb-3">Deliver to</h3>
-              {detectingLocation ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground p-3">
-                  <Loader2 size={16} className="animate-spin text-primary" />
-                  Detecting your location...
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex items-start gap-3 bg-secondary rounded-xl p-3.5 border-2 border-primary">
-                    <MapPin size={18} className="text-primary shrink-0 mt-0.5" />
-                    <input
-                      type="text"
-                      value={deliveryAddress}
-                      onChange={(e) => setDeliveryAddress(e.target.value)}
-                      placeholder="Enter delivery address"
-                      className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-                    />
+            <div className="mb-5 space-y-3">
+              <h3 className="font-heading font-bold text-sm mb-1">Where should we deliver?</h3>
+
+              {/* Saved address option */}
+              {savedAddress && (
+                <button
+                  onClick={() => {
+                    setDeliveryAddress(savedAddress);
+                    setAddressSource("saved");
+                  }}
+                  className={`w-full flex items-start gap-3 rounded-xl p-3.5 text-left border-2 transition-colors ${
+                    addressSource === "saved" ? "border-primary bg-primary/5" : "border-border bg-secondary"
+                  }`}
+                >
+                  {addressSource === "saved" && <Check size={16} className="text-primary shrink-0 mt-0.5" />}
+                  <MapPin size={16} className="text-primary shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-foreground">Saved address</p>
+                    <p className="text-xs text-muted-foreground truncate">{savedAddress}</p>
                   </div>
+                </button>
+              )}
+
+              {/* Use current location */}
+              <button
+                onClick={detectLocation}
+                disabled={detectingLocation}
+                className={`w-full flex items-center gap-3 rounded-xl p-3.5 text-left border-2 transition-colors ${
+                  addressSource === "current" ? "border-primary bg-primary/5" : "border-border bg-secondary"
+                }`}
+              >
+                {detectingLocation ? (
+                  <Loader2 size={16} className="animate-spin text-primary shrink-0" />
+                ) : (
+                  <MapPin size={16} className="text-primary shrink-0" />
+                )}
+                <span className="text-xs font-semibold text-foreground">
+                  {detectingLocation ? "Detecting location..." : "Use current location 📍"}
+                </span>
+              </button>
+
+              {/* Manual input */}
+              <div className={`rounded-xl p-3.5 border-2 transition-colors ${
+                addressSource === "manual" ? "border-primary bg-primary/5" : "border-border bg-secondary"
+              }`}>
+                <div className="flex items-start gap-3">
+                  <MapPin size={16} className="text-primary shrink-0 mt-0.5" />
+                  <input
+                    type="text"
+                    value={addressSource === "manual" ? deliveryAddress : ""}
+                    onChange={(e) => {
+                      setDeliveryAddress(e.target.value);
+                      setAddressSource("manual");
+                    }}
+                    onFocus={() => setAddressSource("manual")}
+                    placeholder="Enter delivery address"
+                    className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  />
+                </div>
+              </div>
+
+              {/* Selected address display */}
+              {deliveryAddress && addressSource && (
+                <div className="bg-primary/5 border-2 border-primary rounded-xl p-3 text-xs text-foreground">
+                  📍 Delivering to: {deliveryAddress}
                 </div>
               )}
             </div>
@@ -267,7 +345,7 @@ const Checkout = () => {
           {/* Pickup info */}
           {deliveryType === "Pickup" && (
             <div className="mb-5">
-              <h3 className="font-heading font-bold text-sm mb-3">Pickup from</h3>
+              <h3 className="font-heading font-bold text-sm mb-3">Confirm your pickup</h3>
               <div className="flex items-start gap-3 bg-secondary rounded-xl p-3.5 border border-border">
                 <MapPin size={18} className="text-primary shrink-0 mt-0.5" />
                 <div>
@@ -281,15 +359,18 @@ const Checkout = () => {
             </div>
           )}
 
-          {/* Card payment */}
+          {/* Payment method */}
           <div className="mb-28">
-            <h3 className="font-heading font-bold text-sm mb-3">Pay with card</h3>
+            <h3 className="font-heading font-bold text-sm mb-3">💳 Payment</h3>
             <div className="bg-secondary rounded-xl p-4 border border-border">
               <div className="flex items-center gap-2 mb-3">
                 <CreditCard size={18} className="text-primary" />
                 <span className="text-sm font-medium">Credit / Debit Card</span>
               </div>
               <CardElement options={cardElementOptions} />
+              <p className="text-[11px] text-muted-foreground mt-3">
+                Test card: 4242 4242 4242 4242 | Any future date | Any CVC
+              </p>
             </div>
             <div className="flex items-center gap-1.5 mt-3 justify-center">
               <Lock size={12} className="text-muted-foreground" />
@@ -305,6 +386,10 @@ const Checkout = () => {
               deliveryType={deliveryType}
               deliveryFee={deliveryFee}
               deliveryAddress={deliveryAddress}
+              restaurantLat={restaurant.latitude}
+              restaurantLng={restaurant.longitude}
+              deliveryLat={deliveryLat}
+              deliveryLng={deliveryLng}
             />
           </div>
         </div>

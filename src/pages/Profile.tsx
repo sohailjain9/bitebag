@@ -6,9 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 
 const menuItems = [
-  { icon: MapPin, label: "Saved Addresses" },
-  { icon: Bell, label: "Notifications" },
-  { icon: HelpCircle, label: "Help & Support" },
+  { icon: MapPin, label: "Saved Addresses", path: "/profile/addresses" },
+  { icon: Bell, label: "Notifications", path: "/profile/notifications" },
+  { icon: HelpCircle, label: "Help & Support", path: "/profile/help" },
 ];
 
 const Profile = () => {
@@ -74,6 +74,7 @@ const Profile = () => {
           {menuItems.map((item) => (
             <button
               key={item.label}
+              onClick={() => navigate(item.path)}
               className="w-full flex items-center gap-3 py-3.5 px-1 text-left border-b border-border"
             >
               <item.icon size={20} className="text-muted-foreground" />

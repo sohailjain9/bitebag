@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, MapPin } from "lucide-react";
 import MobileLayout from "@/components/MobileLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
-type Step = "phone" | "otp" | "name";
+type Step = "phone" | "otp" | "name" | "address";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -13,8 +13,10 @@ const Auth = () => {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [name, setName] = useState("");
+  const [address, setAddress] = useState("");
   const [countdown, setCountdown] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [detectingLocation, setDetectingLocation] = useState(false);
 
   const startCountdown = () => {
     setCountdown(30);
@@ -72,7 +74,6 @@ const Auth = () => {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      // Set session from the response
       if (data?.session) {
         await supabase.auth.setSession({
           access_token: data.session.access_token,
@@ -92,14 +93,46 @@ const Auth = () => {
     }
   };
 
-  const handleComplete = async () => {
+  const handleNameContinue = () => {
     if (!name.trim()) return;
+    setStep("address");
+  };
+
+  const handleDetectLocation = async () => {
+    if (!navigator.geolocation) {
+      toast({ title: "Location not available", variant: "destructive" });
+      return;
+    }
+    setDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`
+          );
+          const data = await res.json();
+          setAddress(data.display_name || `${pos.coords.latitude}, ${pos.coords.longitude}`);
+        } catch {
+          setAddress(`${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
+        }
+        setDetectingLocation(false);
+      },
+      () => {
+        toast({ title: "Location access denied", variant: "destructive" });
+        setDetectingLocation(false);
+      }
+    );
+  };
+
+  const handleComplete = async (skipAddress = false) => {
     setLoading(true);
     try {
-      // Update profile with display name
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        await supabase.from("profiles").update({ display_name: name.trim() }).eq("user_id", user.id);
+        await supabase.from("profiles").update({
+          display_name: name.trim(),
+          saved_address: skipAddress ? null : (address.trim() || null),
+        } as any).eq("user_id", user.id);
       }
       navigate("/home");
     } catch (err: any) {
@@ -109,15 +142,18 @@ const Auth = () => {
     }
   };
 
+  const handleBack = () => {
+    if (step === "phone") navigate(-1);
+    else if (step === "otp") setStep("phone");
+    else if (step === "name") setStep("otp");
+    else setStep("name");
+  };
+
   return (
     <MobileLayout showNav={false}>
       <div className="min-h-screen px-6 pt-4 animate-slide-in">
         <button
-          onClick={() => {
-            if (step === "phone") navigate(-1);
-            else if (step === "otp") setStep("phone");
-            else setStep("otp");
-          }}
+          onClick={handleBack}
           className="w-10 h-10 flex items-center justify-center rounded-full bg-secondary mb-6"
         >
           <ArrowLeft size={20} className="text-foreground" />
@@ -209,27 +245,77 @@ const Auth = () => {
         {step === "name" && (
           <div className="animate-fade-scale-in">
             <h1 className="font-heading font-bold text-2xl text-foreground mb-2">
-              What's your name?
+              Welcome to BiteBag! 🎉
             </h1>
             <p className="text-muted-foreground text-sm mb-8">
-              Let us know what to call you
+              What should we call you?
             </p>
 
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
+              placeholder="Your first name"
               className="w-full bg-secondary rounded-xl px-4 py-3.5 text-base outline-none focus:ring-2 focus:ring-primary/30 mb-6 placeholder:text-muted-foreground"
             />
 
             <button
-              onClick={handleComplete}
-              disabled={!name.trim() || loading}
+              onClick={handleNameContinue}
+              disabled={!name.trim()}
               className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl text-base disabled:opacity-40 transition-all active:scale-[0.97] flex items-center justify-center gap-2"
             >
+              Continue
+            </button>
+          </div>
+        )}
+
+        {step === "address" && (
+          <div className="animate-fade-scale-in">
+            <h1 className="font-heading font-bold text-2xl text-foreground mb-2">
+              Where do you usually order to?
+            </h1>
+            <p className="text-muted-foreground text-sm mb-8">
+              We'll use this for faster checkout
+            </p>
+
+            <button
+              onClick={handleDetectLocation}
+              disabled={detectingLocation}
+              className="w-full flex items-center justify-center gap-2 bg-secondary rounded-xl px-4 py-3.5 text-sm font-medium text-foreground mb-4 transition-all active:scale-[0.97]"
+            >
+              {detectingLocation ? (
+                <Loader2 size={16} className="animate-spin text-primary" />
+              ) : (
+                <MapPin size={16} className="text-primary" />
+              )}
+              {detectingLocation ? "Detecting location..." : "Use my current location 📍"}
+            </button>
+
+            <div className="relative mb-6">
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Enter your home or work address"
+                className="w-full bg-secondary rounded-xl px-4 py-3.5 text-base outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground"
+              />
+            </div>
+
+            <button
+              onClick={() => handleComplete(false)}
+              disabled={!address.trim() || loading}
+              className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl text-base disabled:opacity-40 transition-all active:scale-[0.97] mb-4 flex items-center justify-center gap-2"
+            >
               {loading && <Loader2 size={18} className="animate-spin" />}
-              Let's Go 🎉
+              Continue
+            </button>
+
+            <button
+              onClick={() => handleComplete(true)}
+              disabled={loading}
+              className="w-full text-center text-sm text-muted-foreground underline"
+            >
+              Skip for now
             </button>
           </div>
         )}

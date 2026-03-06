@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import MobileLayout from "@/components/MobileLayout";
 import { formatOrderDate, formatPickupWindow } from "@/lib/formatTime";
 
@@ -7,14 +8,50 @@ const OrderConfirmation = () => {
   const navigate = useNavigate();
   const { state } = useLocation() as {
     state: {
-      restaurant: { name: string; address: string | null; pickup_start: string | null; pickup_end: string | null };
+      restaurant: {
+        name: string;
+        address: string | null;
+        pickup_start: string | null;
+        pickup_end: string | null;
+        latitude?: number | null;
+        longitude?: number | null;
+      };
       total: number;
       deliveryType: string;
       deliveryAddress?: string;
       orderNumber: string;
       createdAt: string;
+      deliveryLat?: number | null;
+      deliveryLng?: number | null;
     } | null;
   };
+
+  const [estimatedMinutes, setEstimatedMinutes] = useState<string>("30-45 minutes");
+  const [loadingEta, setLoadingEta] = useState(false);
+
+  useEffect(() => {
+    if (!state || state.deliveryType !== "Delivery") return;
+    const rLat = state.restaurant.latitude;
+    const rLng = state.restaurant.longitude;
+    const dLat = state.deliveryLat;
+    const dLng = state.deliveryLng;
+    if (!rLat || !rLng || !dLat || !dLng) return;
+
+    setLoadingEta(true);
+    fetch(
+      `https://api.openrouteservice.org/v2/directions/driving-car?api_key=5b3ce3597851110001cf6248a1b4e45e6d744b3a9a3b5a8b5c87d0e2&start=${rLng},${rLat}&end=${dLng},${dLat}`
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        const durationSec = data?.features?.[0]?.properties?.summary?.duration;
+        if (durationSec) {
+          const mins = Math.ceil(durationSec / 60) + 10; // +10 prep time
+          setEstimatedMinutes(`${mins} minutes`);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingEta(false));
+  }, [state]);
 
   if (!state) {
     navigate("/home");
@@ -44,7 +81,7 @@ const OrderConfirmation = () => {
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Order number</span>
-              <span className="font-medium">{state.orderNumber}</span>
+              <span className="font-bold text-primary">{state.orderNumber}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Restaurant</span>
@@ -61,7 +98,7 @@ const OrderConfirmation = () => {
                   <span className="font-medium text-right max-w-[60%]">{state.restaurant.address}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Pickup window</span>
+                  <span className="text-muted-foreground">Collect between</span>
                   <span className="font-medium">{pickupWindow}</span>
                 </div>
               </>
@@ -73,7 +110,9 @@ const OrderConfirmation = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Estimated delivery</span>
-                  <span className="font-medium">30-45 minutes</span>
+                  <span className="font-medium">
+                    {loadingEta ? <Loader2 size={14} className="animate-spin inline" /> : estimatedMinutes}
+                  </span>
                 </div>
               </>
             )}
