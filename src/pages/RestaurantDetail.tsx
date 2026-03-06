@@ -1,14 +1,17 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Clock, ShoppingBag, Leaf, Loader2, Truck } from "lucide-react";
+import { ArrowLeft, Clock, ShoppingBag, Loader2, Truck } from "lucide-react";
 import MobileLayout from "@/components/MobileLayout";
 import { useRestaurants } from "@/hooks/useRestaurants";
 import { formatPickupWindow } from "@/lib/formatTime";
+import { haversineKm } from "@/lib/distance";
+import { useUserLocation } from "@/hooks/useUserLocation";
 import { useState } from "react";
 
 const RestaurantDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { restaurants, loading } = useRestaurants();
+  const { location: userLoc } = useUserLocation();
   const [imgError, setImgError] = useState(false);
 
   if (loading) {
@@ -34,12 +37,20 @@ const RestaurantDetail = () => {
   }
 
   const savings = (restaurant.original_value || 0) - (restaurant.bag_price || 0);
+  const savingsPercent = restaurant.original_value
+    ? Math.round((savings / restaurant.original_value) * 100)
+    : 0;
   const remainingPercent =
     restaurant.total_bags && restaurant.total_bags > 0
       ? ((restaurant.bags_remaining || 0) / restaurant.total_bags) * 100
       : 0;
   const soldOut = (restaurant.bags_remaining ?? 0) <= 0;
   const pickupWindow = formatPickupWindow(restaurant.pickup_start, restaurant.pickup_end);
+
+  const distanceText =
+    userLoc && restaurant.latitude && restaurant.longitude
+      ? `${haversineKm(userLoc.latitude, userLoc.longitude, restaurant.latitude, restaurant.longitude).toFixed(1)} km away`
+      : null;
 
   const initials = restaurant.name
     .split(" ")
@@ -79,11 +90,16 @@ const RestaurantDetail = () => {
           <h1 className="font-heading font-bold text-2xl text-foreground">{restaurant.name}</h1>
           <p className="text-muted-foreground text-sm mt-1">
             {restaurant.cuisine} · {restaurant.address}
+            {distanceText && ` · ${distanceText}`}
           </p>
 
           <div className="flex items-center gap-2 mt-3">
-            <span className="inline-block bg-primary-light text-primary-light-foreground text-xs font-semibold px-3 py-1 rounded-full">
-              {soldOut ? "Sold Out" : "Open for orders"}
+            <span className={`inline-block text-xs font-semibold px-3 py-1 rounded-full ${
+              soldOut
+                ? "bg-destructive/10 text-destructive"
+                : "bg-primary-light text-primary-light-foreground"
+            }`}>
+              {soldOut ? "Sold Out" : `${restaurant.bags_remaining} bags left today`}
             </span>
             {restaurant.delivery_available && (
               <span className="inline-flex items-center gap-1 bg-secondary text-muted-foreground text-xs font-semibold px-3 py-1 rounded-full">
@@ -92,16 +108,41 @@ const RestaurantDetail = () => {
             )}
           </div>
 
+          {/* Savings banner */}
+          {savings > 0 && (
+            <div className="bg-primary/10 rounded-xl p-3 mt-4 text-center">
+              <span className="text-primary font-bold text-sm">
+                You save ₹{savings} — {savingsPercent}% off!
+              </span>
+            </div>
+          )}
+
           <hr className="border-border my-5" />
 
           {/* Surprise bag section */}
           <div className="flex items-center gap-2 mb-3">
             <ShoppingBag size={18} className="text-primary" />
-            <h2 className="font-heading font-bold text-base text-foreground">Tonight's Surprise Bag</h2>
+            <h2 className="font-heading font-bold text-base text-foreground">🛍️ What's in your Surprise Bag?</h2>
           </div>
-          <p className="text-muted-foreground text-sm leading-relaxed mb-4">
+          <p className="text-muted-foreground text-sm leading-relaxed mb-2">
             {restaurant.bag_contents || `A delightful mix of ${restaurant.name}'s items — freshly prepared today, rescued from waste`}
           </p>
+          <p className="text-muted-foreground text-xs italic mb-4">
+            Exact contents vary daily — that's the surprise!
+          </p>
+
+          {/* Pickup window */}
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+            <Clock size={16} className="text-primary" />
+            <span>🕐 Collect between {pickupWindow}</span>
+          </div>
+
+          {/* Delivery info */}
+          {restaurant.delivery_available && (
+            <p className="text-sm text-muted-foreground mb-4">
+              🛵 Delivery available for ₹49 extra
+            </p>
+          )}
 
           {/* Pricing */}
           <div className="bg-secondary rounded-xl p-4 mb-5">
@@ -121,11 +162,11 @@ const RestaurantDetail = () => {
           </div>
 
           {/* Bags remaining */}
-          <div className="mb-5">
+          <div className="mb-28">
             <div className="flex justify-between text-sm mb-2">
               <span className="text-muted-foreground">Bags remaining</span>
               <span className="text-foreground font-medium">
-                {restaurant.bags_remaining} of {restaurant.total_bags}
+                {restaurant.bags_remaining ?? 0} of {restaurant.total_bags}
               </span>
             </div>
             <div className="h-2 bg-secondary rounded-full overflow-hidden">
@@ -135,26 +176,6 @@ const RestaurantDetail = () => {
               />
             </div>
           </div>
-
-          {/* Pickup window */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-5">
-            <Clock size={16} className="text-primary" />
-            <span>Pickup: {pickupWindow}</span>
-          </div>
-
-          <hr className="border-border mb-5" />
-
-          <h3 className="font-heading font-bold text-base text-foreground mb-3">
-            What could be in your bag?
-          </h3>
-          <ul className="space-y-2 mb-28">
-            {(restaurant.bag_contents || "").split(",").map((item, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                <Leaf size={14} className="text-primary mt-0.5 shrink-0" />
-                {item.trim()}
-              </li>
-            ))}
-          </ul>
         </div>
 
         {/* Sticky bottom CTA */}

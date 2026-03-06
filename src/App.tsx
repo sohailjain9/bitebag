@@ -12,6 +12,9 @@ import Checkout from "./pages/Checkout";
 import OrderConfirmation from "./pages/OrderConfirmation";
 import Orders from "./pages/Orders";
 import Profile from "./pages/Profile";
+import SavedAddresses from "./pages/SavedAddresses";
+import Notifications from "./pages/Notifications";
+import HelpSupport from "./pages/HelpSupport";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -33,6 +36,9 @@ const App = () => (
           <Route path="/confirmation" element={<ProtectedRoute><OrderConfirmation /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/profile/addresses" element={<ProtectedRoute><SavedAddresses /></ProtectedRoute>} />
+          <Route path="/profile/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+          <Route path="/profile/help" element={<ProtectedRoute><HelpSupport /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

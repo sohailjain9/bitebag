@@ -1,48 +1,89 @@
-import { useState } from "react";
-import { Search, ChevronDown, User, Loader2, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Loader2, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
 import RestaurantCard from "@/components/RestaurantCard";
 import { useRestaurants } from "@/hooks/useRestaurants";
 import { useUserLocation } from "@/hooks/useUserLocation";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { haversineKm } from "@/lib/distance";
+
+const categories = [
+  { label: "All", filter: () => true },
+  { label: "Nearby", filter: () => true, sort: true },
+  { label: "Desserts", filter: (c: string) => /dessert|patisserie/i.test(c) },
+  { label: "Cafes", filter: (c: string) => /cafe/i.test(c) },
+  { label: "Bakeries", filter: (c: string) => /bakery|patisserie/i.test(c) },
+  { label: "Indian Snacks", filter: (c: string) => /indian|snacks/i.test(c) },
+];
+
+function getGreeting(name: string): string {
+  const h = new Date().getHours();
+  if (h >= 6 && h < 12) return `Good morning, ${name}! ☀️`;
+  if (h >= 12 && h < 17) return `Good afternoon, ${name}! 👋`;
+  if (h >= 17 && h < 24) return `Good evening, ${name}! 🌙`;
+  return `Up late, ${name}? 🌙`;
+}
 
 const Home = () => {
   const navigate = useNavigate();
   const { restaurants, loading, error, refetch } = useRestaurants();
   const { location: userLoc } = useUserLocation();
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All");
+  const [displayName, setDisplayName] = useState("");
 
-  const locationText = userLoc ? "Bandra West, Mumbai" : "Mumbai, India";
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("user_id", user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.display_name) setDisplayName(data.display_name);
+      });
+  }, [user]);
 
-  const filtered = restaurants.filter(
-    (r) =>
-      r.name.toLowerCase().includes(search.toLowerCase()) ||
-      (r.cuisine || "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = restaurants
+    .filter((r) => {
+      const matchesSearch =
+        r.name.toLowerCase().includes(search.toLowerCase()) ||
+        (r.cuisine || "").toLowerCase().includes(search.toLowerCase());
+      const cat = categories.find((c) => c.label === activeCategory);
+      const matchesCat = !cat || activeCategory === "All" || activeCategory === "Nearby"
+        ? true
+        : cat.filter(r.cuisine || "");
+      return matchesSearch && matchesCat;
+    })
+    .sort((a, b) => {
+      if (activeCategory === "Nearby" && userLoc && a.latitude && a.longitude && b.latitude && b.longitude) {
+        const distA = haversineKm(userLoc.latitude, userLoc.longitude, a.latitude, a.longitude);
+        const distB = haversineKm(userLoc.latitude, userLoc.longitude, b.latitude, b.longitude);
+        return distA - distB;
+      }
+      return (b.bags_remaining || 0) - (a.bags_remaining || 0);
+    });
+
+  const firstName = displayName.split(" ")[0] || "there";
 
   return (
     <MobileLayout>
       <div className="px-4 pt-4 animate-fade-scale-in">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <h1 className="font-heading font-extrabold text-xl text-primary">BiteBag</h1>
-          <button
-            onClick={() => navigate("/profile")}
-            className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center"
-          >
-            <User size={18} className="text-muted-foreground" />
-          </button>
+        {/* Greeting */}
+        <h1 className="font-heading font-bold text-[22px] text-foreground mb-1">
+          {getGreeting(firstName)}
+        </h1>
+        <div className="flex items-center gap-1.5 mb-4">
+          <span className="text-primary">📍</span>
+          <span className="text-foreground text-xs font-bold">Mumbai</span>
+          <span className="text-muted-foreground text-xs ml-1">Surprise bags near you</span>
         </div>
 
-        {/* Location */}
-        <button className="flex items-center gap-1 mb-4 group">
-          <span className="text-muted-foreground text-xs">Delivering to</span>
-          <span className="text-foreground text-xs font-bold ml-1">{locationText}</span>
-          <ChevronDown size={14} className="text-primary" />
-        </button>
-
         {/* Search */}
-        <div className="relative mb-6">
+        <div className="relative mb-4">
           <Search
             size={18}
             className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
@@ -51,9 +92,26 @@ const Home = () => {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search restaurants or cuisines"
+            placeholder="Search restaurants or cuisines..."
             className="w-full bg-secondary rounded-xl pl-11 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground"
           />
+        </div>
+
+        {/* Category pills */}
+        <div className="flex gap-2 mb-5 overflow-x-auto no-scrollbar">
+          {categories.map((cat) => (
+            <button
+              key={cat.label}
+              onClick={() => setActiveCategory(cat.label)}
+              className={`shrink-0 px-4 py-2 rounded-full text-xs font-semibold transition-colors ${
+                activeCategory === cat.label
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background text-primary border border-primary"
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
         </div>
 
         {/* Section heading */}
@@ -61,8 +119,9 @@ const Home = () => {
           <h2 className="font-heading font-bold text-lg text-foreground">
             Available Tonight 🌙
           </h2>
-          <span className="bg-primary-light text-primary-light-foreground text-[10px] font-semibold px-2 py-0.5 rounded-full">
-            Updated live
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
           </span>
         </div>
 
