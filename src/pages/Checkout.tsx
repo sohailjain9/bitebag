@@ -92,6 +92,27 @@ const CheckoutForm = ({ restaurant, total, deliveryType, deliveryFee, deliveryAd
       }
 
       if (paymentIntent?.status === "succeeded") {
+        // Fire WhatsApp notification (non-blocking)
+        supabase.functions.invoke("send-whatsapp-notification", {
+          body: {
+            orderNumber: data.orderNumber,
+            restaurantName: restaurant.name,
+            restaurantAddress: restaurant.address || "",
+            customerName: customerName || "Guest",
+            customerPhone: customerPhone || "",
+            deliveryType: deliveryType || "Pickup",
+            deliveryAddress: deliveryType === "Delivery" ? deliveryAddress : "",
+            bagPrice: restaurant.bag_price || 0,
+            deliveryFee,
+            totalAmount: total,
+            createdAt: new Date().toISOString(),
+          },
+        }).then(res => {
+          console.log("WhatsApp notification response:", res);
+        }).catch(err => {
+          console.error("WhatsApp notification failed (non-blocking):", err);
+        });
+
         navigate("/confirmation", {
           state: {
             restaurant: {
