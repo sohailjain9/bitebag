@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
@@ -36,27 +35,34 @@ serve(async (req) => {
 
     const totalPaisa = amount * 100;
 
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-      apiVersion: "2025-08-27.basil",
-    });
+    const keyId = Deno.env.get("RAZORPAY_KEY_ID") || "";
+    const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET") || "";
 
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: totalPaisa,
-      currency: "inr",
-      metadata: {
-        user_id: user.id,
-        restaurant_id: restaurantId,
-        restaurant_name: restaurantName,
-        delivery_type: deliveryType || "Pickup",
+    // Create Razorpay order
+    const rzpResponse = await fetch("https://api.razorpay.com/v1/orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Basic " + btoa(keyId + ":" + keySecret),
       },
+      body: JSON.stringify({
+        amount: totalPaisa,
+        currency: "INR",
+        receipt: `bitebag_${Date.now()}`,
+      }),
     });
 
+    const rzpOrder = await rzpResponse.json();
+    if (!rzpResponse.ok) {
+      throw new Error(rzpOrder.error?.description || "Failed to create Razorpay order");
+    }
+
+    // Insert order into database
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Insert order
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
       .insert({
@@ -72,51 +78,21 @@ serve(async (req) => {
         delivery_address: deliveryAddress || null,
         customer_name: customerName || null,
         customer_phone: customerPhone || null,
-        stripe_payment_intent_id: paymentIntent.id,
-        status: "confirmed",
+        stripe_payment_intent_id: rzpOrder.id, // store razorpay order id here
+        status: "pending",
       })
       .select("order_number, id, created_at")
       .single();
 
     if (orderError) throw orderError;
 
-    // Atomically decrement bags_remaining
-    await supabaseAdmin.rpc("decrement_bags", { restaurant_uuid: restaurantId });
-
-    // Send WhatsApp notification (fire and forget)
-    try {
-      const notifUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-whatsapp-notification`;
-      console.log("Calling WhatsApp notification at:", notifUrl);
-      const notifResponse = await fetch(notifUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-        },
-        body: JSON.stringify({
-          orderNumber: order.order_number,
-          restaurantName,
-          restaurantAddress: restaurantAddress || "",
-          customerName: customerName || "Guest",
-          customerPhone: customerPhone || "",
-          deliveryType: deliveryType || "Pickup",
-          deliveryAddress: deliveryAddress || "",
-          bagPrice: bagPrice || 0,
-          deliveryFee: deliveryFee || 0,
-          totalAmount: amount,
-          createdAt: order.created_at,
-        }),
-      });
-      const notifResult = await notifResponse.text();
-      console.log("WhatsApp notification response:", notifResponse.status, notifResult);
-    } catch (e) {
-      console.error("WhatsApp notification failed:", e);
-    }
-
     return new Response(
       JSON.stringify({
-        clientSecret: paymentIntent.client_secret,
+        orderId: rzpOrder.id,
+        razorpayKeyId: keyId,
         orderNumber: order.order_number,
+        dbOrderId: order.id,
+        createdAt: order.created_at,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     );
