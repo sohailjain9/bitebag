@@ -91,7 +91,7 @@ const Orders = () => {
                     <div className="mt-3 pt-3 border-t border-border space-y-2 text-sm animate-fade-scale-in">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Order number</span>
-                        <span>{order.order_number}</span>
+                        <span>{order.order_number?.replace(/#BB/i, "#SW")}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Total paid</span>
