@@ -43,7 +43,7 @@ serve(async (req) => {
       ? `Address: ${deliveryAddress || "N/A"}`
       : `Pickup from: ${restaurantAddress || "N/A"}`;
 
-    const messageBody = `🛍️ New BiteBag Order!
+    const messageBody = `🛍️ New Swoop Order!
 Order: ${orderNumber}
 Restaurant: ${restaurantName}
 Customer: ${customerName || "Guest"}
