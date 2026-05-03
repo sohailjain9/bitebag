@@ -73,7 +73,7 @@ const OrderConfirmation = () => {
           Order Confirmed! 🎉
         </h1>
         <p className="text-muted-foreground text-center mb-8">
-          Get ready for your BiteBag
+          Get ready for your Swoop
         </p>
 
         {/* Order details card */}
@@ -81,7 +81,7 @@ const OrderConfirmation = () => {
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Order number</span>
-              <span className="font-bold text-primary">{state.orderNumber}</span>
+              <span className="font-bold text-primary">{state.orderNumber?.replace(/#BB/i, "#SW")}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Restaurant</span>

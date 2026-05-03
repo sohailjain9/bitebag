@@ -48,7 +48,7 @@ serve(async (req) => {
       body: JSON.stringify({
         amount: totalPaisa,
         currency: "INR",
-        receipt: `bitebag_${Date.now()}`,
+        receipt: `swoop_${Date.now()}`,
       }),
     });
 

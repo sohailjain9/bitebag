@@ -111,7 +111,7 @@ export interface Order {
 export const sampleOrders: Order[] = [
   {
     id: "1",
-    orderNumber: "#BB001",
+    orderNumber: "#SW001",
     restaurant: restaurants[0],
     date: "Today, 8:00 PM",
     pricePaid: 209,
@@ -120,7 +120,7 @@ export const sampleOrders: Order[] = [
   },
   {
     id: "2",
-    orderNumber: "#BB002",
+    orderNumber: "#SW002",
     restaurant: restaurants[2],
     date: "Yesterday, 7:30 PM",
     pricePaid: 309,

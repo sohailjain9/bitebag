@@ -51,7 +51,7 @@ const Orders = () => {
           <div className="text-center py-12">
             <ShoppingBag size={40} className="mx-auto text-muted-foreground mb-3" />
             <p className="font-heading font-bold text-lg text-foreground mb-1">No orders yet!</p>
-            <p className="text-muted-foreground text-sm mb-6">Your BiteBag orders will appear here</p>
+            <p className="text-muted-foreground text-sm mb-6">Your Swoop orders will appear here</p>
             <button
               onClick={() => navigate("/home")}
               className="bg-primary text-primary-foreground font-semibold px-6 py-3 rounded-2xl text-sm"
@@ -91,7 +91,7 @@ const Orders = () => {
                     <div className="mt-3 pt-3 border-t border-border space-y-2 text-sm animate-fade-scale-in">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Order number</span>
-                        <span>{order.order_number}</span>
+                        <span>{order.order_number?.replace(/#BB/i, "#SW")}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Total paid</span>

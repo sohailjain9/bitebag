@@ -14,7 +14,7 @@ const faqs = [
   },
   {
     q: "What if I'm not happy with my bag?",
-    a: "BiteBag bags are surprise bags so contents vary daily. If there's a genuine quality issue contact us and we'll make it right.",
+    a: "Swoop bags are surprise bags so contents vary daily. If there's a genuine quality issue contact us and we'll make it right.",
   },
   {
     q: "How do I get a refund?",
