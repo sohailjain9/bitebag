@@ -245,7 +245,7 @@ const Auth = () => {
         {step === "name" && (
           <div className="animate-fade-scale-in">
             <h1 className="font-heading font-bold text-2xl text-foreground mb-2">
-              Welcome to BiteBag! 🎉
+              Welcome to Swoop! 🎉
             </h1>
             <p className="text-muted-foreground text-sm mb-8">
               What should we call you?

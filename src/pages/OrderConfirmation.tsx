@@ -73,7 +73,7 @@ const OrderConfirmation = () => {
           Order Confirmed! 🎉
         </h1>
         <p className="text-muted-foreground text-center mb-8">
-          Get ready for your BiteBag
+          Get ready for your Swoop
         </p>
 
         {/* Order details card */}

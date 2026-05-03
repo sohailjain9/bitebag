@@ -147,7 +147,7 @@ const Checkout = () => {
         key: data.razorpayKeyId,
         amount: total * 100,
         currency: "INR",
-        name: "BiteBag",
+        name: "Swoop",
         description: "Surprise Bag Order",
         order_id: data.orderId,
         prefill: {

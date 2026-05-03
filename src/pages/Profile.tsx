@@ -28,7 +28,7 @@ const Profile = () => {
         .eq("user_id", user.id)
         .single();
       if (data) {
-        setDisplayName(data.display_name || "BiteBag User");
+        setDisplayName(data.display_name || "Swoop User");
         setPhone(data.phone || "");
         const d = new Date(data.created_at);
         const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -98,7 +98,7 @@ const Profile = () => {
 
         {/* Footer */}
         <div className="mt-12 text-center">
-          <p className="font-heading font-bold text-primary text-lg">BiteBag</p>
+          <p className="font-heading font-bold text-primary text-lg">Swoop</p>
           <p className="text-muted-foreground text-xs mt-1">v1.0.0 · Made with 💚 in India</p>
         </div>
       </div>
