@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import MobileLayout from "@/components/MobileLayout";
-import { Leaf } from "lucide-react";
+
 
 const Splash = () => {
   const navigate = useNavigate();
@@ -10,7 +10,6 @@ const Splash = () => {
       <div className="flex flex-col items-center justify-center min-h-screen px-8">
         {/* Logo */}
         <div className="flex items-center gap-2 mb-3 animate-fade-scale-in">
-          <Leaf size={36} className="text-primary" />
           <h1 className="font-heading font-extrabold text-4xl text-primary tracking-tight">
             Swoop
           </h1>
