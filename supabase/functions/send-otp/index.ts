@@ -19,6 +19,14 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Demo bypass for reviewer testing — no real SMS sent
+    if (phone === "9000000001") {
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID")!;
     const authToken = Deno.env.get("TWILIO_AUTH_TOKEN")!;
     const serviceSid = Deno.env.get("TWILIO_VERIFY_SERVICE_SID")!;
