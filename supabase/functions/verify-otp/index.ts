@@ -25,25 +25,36 @@ Deno.serve(async (req) => {
     const authToken = Deno.env.get("TWILIO_AUTH_TOKEN")!;
     const serviceSid = Deno.env.get("TWILIO_VERIFY_SERVICE_SID")!;
 
-    // Verify code via Twilio Verify API
-    const twilioUrl = `https://verify.twilio.com/v2/Services/${serviceSid}/VerificationCheck`;
-    const verifyBody = new URLSearchParams({
-      To: `+91${phone}`,
-      Code: code,
-    });
+    let isApproved = false;
 
-    const twilioRes = await fetch(twilioUrl, {
-      method: "POST",
-      headers: {
-        Authorization: "Basic " + btoa(`${accountSid}:${authToken}`),
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: verifyBody,
-    });
+    // Demo bypass for reviewer testing — skip Twilio Verify
+    if (phone === "9000000001" && code === "123456") {
+      isApproved = true;
+    } else {
+      // Verify code via Twilio Verify API
+      const twilioUrl = `https://verify.twilio.com/v2/Services/${serviceSid}/VerificationCheck`;
+      const verifyBody = new URLSearchParams({
+        To: `+91${phone}`,
+        Code: code,
+      });
 
-    const verifyResult = await twilioRes.json();
+      const twilioRes = await fetch(twilioUrl, {
+        method: "POST",
+        headers: {
+          Authorization: "Basic " + btoa(`${accountSid}:${authToken}`),
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: verifyBody,
+      });
 
-    if (!twilioRes.ok || verifyResult.status !== "approved") {
+      const verifyResult = await twilioRes.json();
+
+      if (twilioRes.ok && verifyResult.status === "approved") {
+        isApproved = true;
+      }
+    }
+
+    if (!isApproved) {
       return new Response(
         JSON.stringify({ error: "Invalid or expired OTP" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
